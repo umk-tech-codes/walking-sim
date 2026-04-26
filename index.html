@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Walking Simulator</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet"/>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#000}
+canvas{display:block;width:100%;height:100%}
+
+/* HUD */
+#hud{position:fixed;top:0;left:0;right:0;bottom:0;pointer-events:none;z-index:10;font-family:'Inter',sans-serif}
+
+/* Top stats */
+#top-bar{position:absolute;top:28px;left:50%;transform:translateX(-50%);text-align:center;color:rgba(255,255,255,0.75)}
+#top-bar .label{font-size:10px;font-weight:300;letter-spacing:6px;text-transform:uppercase;opacity:0.5}
+#top-bar .count{font-size:52px;font-weight:600;letter-spacing:4px;line-height:1.1;background:linear-gradient(180deg,rgba(255,255,255,0.95),rgba(255,255,255,0.5));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+#top-bar .meta{font-size:11px;font-weight:300;letter-spacing:3px;color:rgba(255,255,255,0.3);margin-top:4px}
+
+/* Time of day indicator */
+#time-badge{position:absolute;top:32px;right:32px;font-size:11px;letter-spacing:2px;color:rgba(255,255,255,0.4);text-align:right}
+#time-badge .icon{font-size:20px;display:block;margin-bottom:2px}
+
+/* Controls bottom */
+#controls{position:absolute;bottom:32px;left:50%;transform:translateX(-50%);display:flex;gap:10px;pointer-events:all;flex-wrap:wrap;justify-content:center;max-width:90vw}
+.btn{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:rgba(255,255,255,0.65);padding:10px 20px;font-family:'Inter',sans-serif;font-size:11px;font-weight:400;letter-spacing:2px;text-transform:uppercase;cursor:pointer;border-radius:8px;transition:all 0.25s;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);white-space:nowrap}
+.btn:hover{background:rgba(255,255,255,0.12);border-color:rgba(255,255,255,0.2)}
+.btn.on{background:rgba(255,255,255,0.14);border-color:rgba(255,255,255,0.3);color:#fff}
+.btn.walk-hold{font-size:13px;padding:12px 32px;border-color:rgba(255,255,255,0.2)}
+.btn.walk-hold.on{background:rgba(100,200,120,0.15);border-color:rgba(100,200,120,0.4);color:#a0e8a0}
+.btn.stretch{border-color:rgba(200,160,80,0.3)}
+.btn.stretch.on{background:rgba(200,160,80,0.15);border-color:rgba(200,160,80,0.4);color:#e8d090}
+
+/* Toast — above key hint */
+#toast{position:absolute;bottom:108px;left:50%;transform:translateX(-50%);font-size:11px;letter-spacing:2px;color:rgba(255,255,255,0.45);transition:opacity 0.6s;opacity:0;white-space:nowrap;text-align:center}
+
+/* Stretch overlay — now just a top banner, character animates on canvas */
+#stretch-overlay{position:fixed;top:0;left:0;right:0;z-index:30;display:none;justify-content:center;pointer-events:none}
+#stretch-overlay.show{display:flex}
+#stretch-box{text-align:center;color:rgba(255,255,255,0.9);font-family:'Inter',sans-serif;padding:20px 32px;background:rgba(0,0,0,0.55);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid rgba(255,255,255,0.08);width:100%;display:flex;flex-direction:column;align-items:center}
+#stretch-box .emoji{font-size:28px;margin-bottom:4px}
+#stretch-box .move-name{font-size:18px;font-weight:300;letter-spacing:4px;margin-bottom:4px}
+#stretch-box .move-desc{font-size:12px;font-weight:300;color:rgba(255,255,255,0.4);line-height:1.5;margin-bottom:8px;max-width:400px}
+#stretch-box .timer{font-size:32px;font-weight:600;letter-spacing:2px;margin-bottom:8px}
+#stretch-box .skip-btn{background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.6);padding:6px 20px;font-family:'Inter',sans-serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;cursor:pointer;border-radius:6px;pointer-events:all}
+
+/* Start overlay */
+#start-overlay{position:fixed;inset:0;z-index:50;background:radial-gradient(ellipse at 50% 60%,#0d1117,#000);display:flex;flex-direction:column;align-items:center;justify-content:center;transition:opacity 1s}
+#start-overlay.hidden{opacity:0;pointer-events:none}
+#start-overlay h1{font-family:'Inter',sans-serif;font-weight:300;font-size:42px;letter-spacing:12px;text-transform:uppercase;color:rgba(255,255,255,0.85);margin-bottom:8px}
+#start-overlay .sub{font-family:'Inter',sans-serif;font-weight:300;font-size:13px;letter-spacing:4px;color:rgba(255,255,255,0.3);margin-bottom:20px}
+.start-desc{font-family:'Inter',sans-serif;font-weight:300;font-size:12px;letter-spacing:1px;color:rgba(255,255,255,0.22);line-height:1.8;margin-bottom:36px;text-align:center}
+.start-btn{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.8);padding:16px 48px;font-family:'Inter',sans-serif;font-size:14px;font-weight:400;letter-spacing:6px;text-transform:uppercase;cursor:pointer;border-radius:8px;transition:all 0.3s}
+.start-btn:hover{background:rgba(255,255,255,0.12);border-color:rgba(255,255,255,0.3);color:#fff}
+
+/* Vignette */
+#vignette{position:fixed;inset:0;z-index:5;pointer-events:none;background:radial-gradient(ellipse at 50% 50%,transparent 55%,rgba(0,0,0,0.55) 100%)}
+
+/* Key hint — sits above controls with enough gap */
+#key-hint{position:absolute;bottom:88px;left:50%;transform:translateX(-50%);font-size:10px;letter-spacing:2px;color:rgba(255,255,255,0.2);pointer-events:none}
+</style>
+</head>
+<body>
+
+<div id="start-overlay">
+  <h1>Walking</h1>
+  <div class="sub">an asmr walking experience</div>
+  <p class="start-desc">Ambient music · Nature sounds · Gentle stretches<br/>Hold forward to walk. Breathe. Enjoy the journey.</p>
+  <button class="start-btn" id="start-btn">Begin</button>
+</div>
+
+<div id="vignette"></div>
+
+<div id="hud">
+  <div id="top-bar">
+    <div class="label">Steps</div>
+    <div class="count" id="step-count">0</div>
+    <div class="meta"><span id="dist-val">0.0</span> km</div>
+  </div>
+  <div id="time-badge"><span class="icon" id="time-icon">🌙</span><span id="time-label">Night</span></div>
+  <div id="toast"></div>
+  <div id="key-hint">Hold W or ↑ or tap Walk to move</div>
+  <div id="controls">
+    <button class="btn walk-hold" id="btn-walk">▶ Walk</button>
+    <button class="btn" id="btn-auto">Auto: Off</button>
+    <button class="btn stretch" id="btn-stretch">🧘 Stretch</button>
+    <button class="btn" id="btn-music">♫ Music</button>
+    <button class="btn" id="btn-ambient">🌿 Ambient</button>
+  </div>
+</div>
+
+<div id="stretch-overlay">
+  <div id="stretch-box">
+    <div class="emoji" id="str-emoji">🙆</div>
+    <div class="move-name" id="str-name">Stretch</div>
+    <div class="move-desc" id="str-desc">Hold and breathe</div>
+    <div class="timer" id="str-timer">15</div>
+    <button class="skip-btn" id="str-skip">Skip</button>
+  </div>
+</div>
+
+<canvas id="c"></canvas>
+
+<script>
+// ─── CONFIG ───
+const STEP_INTERVAL=0.42, WALK_SPEED=120, STRIDE_M=0.75;
+const DAY_CYCLE_SECONDS=480;
+
+// ─── STATE ───
+let walking=false, autoWalk=false, started=false;
+let steps=0, distance=0, stepAcc=0;
+let t=0, scroll=0, walkPhase=0;
+let dayTime=0.25;
+let holdingWalk=false;
+
+// ─── CANVAS ───
+const cv=document.getElementById('c'), cx=cv.getContext('2d');
+function resize(){cv.width=innerWidth;cv.height=innerHeight}
+addEventListener('resize',resize);resize();
+
+// ─── AUDIO ───
+function mkAudio(src,loop,vol){const a=new Audio(src);a.loop=loop;a.volume=vol;a.preload='auto';return a}
+
+// Multiple tracks for cycling
+const musicTracks=['audio/music1.mp3','audio/music2.mp3','audio/music3.mp3'];
+const footstepTracks=['audio/footsteps1.mp3','audio/footsteps2.mp3','audio/footsteps3.mp3'];
+const dayAmbientTracks=['audio/birds1.mp3','audio/birds2.mp3'];
+const nightAmbientTracks=['audio/owls1.mp3','audio/owls2.mp3'];
+
+let musicIdx=0, footstepIdx=0, dayAmbIdx=0, nightAmbIdx=0;
+let musicEl=null, footstepEl=null, ambientEl=null;
+let musicOn=false, ambientOn=false, currentAmbientType=null;
+
+function pickRandom(arr){return arr[Math.floor(Math.random()*arr.length)]}
+
+function createAndPlay(src,loop,vol){
+  const a=new Audio(src);a.loop=loop;a.volume=vol;a.preload='auto';
+  a.play().catch(()=>{});
+  return a;
+}
+
+function toast(m){const e=document.getElementById('toast');e.textContent=m;e.style.opacity='1';setTimeout(()=>e.style.opacity='0',2500)}
+function tryPlay(a){if(a)a.play().catch(()=>{})}
+function tryPause(a){if(a)a.pause()}
+
+function cycleMusic(){
+  if(musicEl){musicEl.pause();musicEl.src=''}
+  musicIdx=(musicIdx+1)%musicTracks.length;
+  musicEl=createAndPlay(musicTracks[musicIdx],false,0.35);
+  musicEl.addEventListener('ended',()=>{if(musicOn)cycleMusic()});
+}
+
+function cycleFootsteps(){
+  if(footstepEl){footstepEl.pause();footstepEl.src=''}
+  footstepIdx=(footstepIdx+1)%footstepTracks.length;
+  footstepEl=createAndPlay(footstepTracks[footstepIdx],false,0.25);
+  footstepEl.addEventListener('ended',()=>{if(walking&&started)cycleFootsteps()});
+}
+
+function startMusic(){
+  musicIdx=Math.floor(Math.random()*musicTracks.length);
+  musicEl=createAndPlay(musicTracks[musicIdx],false,0.35);
+  musicEl.addEventListener('ended',()=>{if(musicOn)cycleMusic()});
+}
+
+function startFootsteps(){
+  footstepIdx=Math.floor(Math.random()*footstepTracks.length);
+  footstepEl=createAndPlay(footstepTracks[footstepIdx],false,0.25);
+  footstepEl.addEventListener('ended',()=>{if(walking&&started)cycleFootsteps()});
+}
+
+function updateAmbientForTime(){
+  if(!ambientOn)return;
+  const isDay=dayTime>0.2&&dayTime<0.8;
+  const need=isDay?'day':'night';
+  if(currentAmbientType===need)return;
+  if(ambientEl){ambientEl.pause();ambientEl.src=''}
+  currentAmbientType=need;
+  const tracks=isDay?dayAmbientTracks:nightAmbientTracks;
+  const src=pickRandom(tracks);
+  ambientEl=createAndPlay(src,false,0.3);
+  ambientEl.addEventListener('ended',()=>{
+    if(!ambientOn)return;
+    const t2=currentAmbientType==='day'?dayAmbientTracks:nightAmbientTracks;
+    ambientEl=createAndPlay(pickRandom(t2),false,0.3);
+    ambientEl.addEventListener('ended',arguments.callee);
+  });
+}
+
+// ─── STRETCHES ───
+const stretches=[
+  {id:'overhead',name:'Overhead Reach',desc:'Stand tall, interlace fingers and push palms to the sky.',dur:15},
+  {id:'fold',name:'Forward Fold',desc:'Bend at the hips, let your arms hang. Relax your neck.',dur:15},
+  {id:'armcircle',name:'Arm Circles',desc:'Extend arms out. Make slow circles, forward then backward.',dur:12},
+  {id:'quad',name:'Quad Stretch',desc:'Stand on one leg, pull the other foot to your glute.',dur:20},
+  {id:'chest',name:'Chest Opener',desc:'Clasp hands behind your back, squeeze shoulder blades.',dur:12},
+  {id:'twist',name:'Torso Twist',desc:'Feet shoulder-width apart. Gently rotate your torso.',dur:15},
+  {id:'calfraise',name:'Calf Raises',desc:'Rise onto your toes slowly, hold at the top, lower down.',dur:15},
+  {id:'sidebend',name:'Side Bend',desc:'Reach one arm overhead and lean to the opposite side.',dur:15},
+  {id:'breathe',name:'Deep Breathing',desc:'Inhale 4 counts, hold 4 counts, exhale 6 counts.',dur:20},
+  {id:'lunge',name:'Hip Flexor Lunge',desc:'Step one foot forward into a lunge. Back straight.',dur:20},
+];
+let stretchActive=false, stretchTimer=0, stretchInterval=null, currentStretchId=null, stretchT=0;
+
+function startStretch(){
+  if(stretchActive)return;
+  const s=stretches[Math.floor(Math.random()*stretches.length)];
+  currentStretchId=s.id;
+  stretchT=0;
+  document.getElementById('str-emoji').textContent='🧘';
+  document.getElementById('str-name').textContent=s.name;
+  document.getElementById('str-desc').textContent=s.desc;
+  stretchTimer=s.dur;
+  document.getElementById('str-timer').textContent=stretchTimer;
+  document.getElementById('stretch-overlay').classList.add('show');
+  stretchActive=true;
+  walking=false; updateFootsteps();
+  stretchInterval=setInterval(()=>{
+    stretchTimer--;
+    document.getElementById('str-timer').textContent=Math.max(0,stretchTimer);
+    if(stretchTimer<=0)endStretch();
+  },1000);
+}
+
+function endStretch(){
+  clearInterval(stretchInterval);
+  stretchActive=false;
+  currentStretchId=null;
+  document.getElementById('stretch-overlay').classList.remove('show');
+  if(autoWalk||holdingWalk){walking=true;updateFootsteps()}
+  toast('nice stretch! keep walking 🚶');
+}
+
+document.getElementById('str-skip').onclick=()=>endStretch();
+
+// ─── CONTROLS ───
+document.getElementById('start-btn').onclick=function(){
+  document.getElementById('start-overlay').classList.add('hidden');
+  started=true;
+};
+
+const walkBtn=document.getElementById('btn-walk');
+function startHoldWalk(){if(!started||autoWalk||stretchActive)return;holdingWalk=true;walking=true;walkBtn.classList.add('on');updateFootsteps()}
+function stopHoldWalk(){if(!started||autoWalk)return;holdingWalk=false;walking=false;walkBtn.classList.remove('on');updateFootsteps()}
+walkBtn.addEventListener('mousedown',startHoldWalk);
+walkBtn.addEventListener('mouseup',stopHoldWalk);
+walkBtn.addEventListener('mouseleave',stopHoldWalk);
+walkBtn.addEventListener('touchstart',e=>{e.preventDefault();startHoldWalk()});
+walkBtn.addEventListener('touchend',e=>{e.preventDefault();stopHoldWalk()});
+
+addEventListener('keydown',e=>{if(!started||stretchActive||e.repeat)return;if(e.key==='w'||e.key==='W'||e.key==='ArrowUp')startHoldWalk()});
+addEventListener('keyup',e=>{if(e.key==='w'||e.key==='W'||e.key==='ArrowUp')stopHoldWalk()});
+
+document.getElementById('btn-auto').onclick=function(){
+  autoWalk=!autoWalk;
+  this.textContent=autoWalk?'Auto: On':'Auto: Off';
+  this.classList.toggle('on',autoWalk);
+  if(autoWalk&&!stretchActive){walking=true;walkBtn.classList.add('on');updateFootsteps()}
+  if(!autoWalk&&!holdingWalk){walking=false;walkBtn.classList.remove('on');updateFootsteps()}
+};
+
+document.getElementById('btn-music').onclick=function(){
+  musicOn=!musicOn;this.classList.toggle('on',musicOn);
+  if(musicOn){startMusic()}else{tryPause(musicEl)}
+};
+
+document.getElementById('btn-ambient').onclick=function(){
+  ambientOn=!ambientOn;this.classList.toggle('on',ambientOn);
+  if(ambientOn){currentAmbientType=null;updateAmbientForTime()}
+  else{if(ambientEl){ambientEl.pause();ambientEl.src='';ambientEl=null;currentAmbientType=null}}
+};
+
+document.getElementById('btn-stretch').onclick=startStretch;
+
+function updateFootsteps(){
+  if(walking&&started){if(!footstepEl||footstepEl.paused)startFootsteps()}
+  else{tryPause(footstepEl)}
+}
+
+// ─── HASH ───
+function hash(n){let x=Math.sin(n*127.1+311.7)*43758.5453;return x-Math.floor(x)}
+
+// ─── TIME OF DAY ───
+function lerpColor(a,b,t){
+  const pa=parseInt(a.slice(1),16),pb=parseInt(b.slice(1),16);
+  const ra=(pa>>16)&255,ga=(pa>>8)&255,ba2=pa&255;
+  const rb=(pb>>16)&255,gb=(pb>>8)&255,bb=pb&255;
+  const r=Math.round(ra+(rb-ra)*t),g=Math.round(ga+(gb-ga)*t),bl=Math.round(ba2+(bb-ba2)*t);
+  return`rgb(${r},${g},${bl})`;
+}
+
+function getTimeColors(){
+  const phases=[
+    {t:0,skyT:'#050510',skyB:'#0a0a20',ground:'#080810',mtn:'#060612',fog:'rgba(5,5,16,'},
+    {t:0.2,skyT:'#0a0a2e',skyB:'#1a1a3e',ground:'#0d0f18',mtn:'#0e1225',fog:'rgba(18,20,36,'},
+    {t:0.28,skyT:'#2a1525',skyB:'#e8a060',ground:'#1a1510',mtn:'#1a1020',fog:'rgba(40,25,20,'},
+    {t:0.35,skyT:'#4080c0',skyB:'#a0d0f0',ground:'#2a3020',mtn:'#304050',fog:'rgba(60,70,80,'},
+    {t:0.5,skyT:'#3898d8',skyB:'#88c8e8',ground:'#384828',mtn:'#406070',fog:'rgba(70,85,95,'},
+    {t:0.7,skyT:'#4080c0',skyB:'#a0d0f0',ground:'#2a3020',mtn:'#304050',fog:'rgba(60,70,80,'},
+    {t:0.75,skyT:'#301828',skyB:'#e07848',ground:'#1a1510',mtn:'#1a1020',fog:'rgba(40,25,20,'},
+    {t:0.82,skyT:'#0a0a2e',skyB:'#1a1a3e',ground:'#0d0f18',mtn:'#0e1225',fog:'rgba(18,20,36,'},
+    {t:1,skyT:'#050510',skyB:'#0a0a20',ground:'#080810',mtn:'#060612',fog:'rgba(5,5,16,'},
+  ];
+  let a=phases[0],b=phases[1];
+  for(let i=0;i<phases.length-1;i++){if(dayTime>=phases[i].t&&dayTime<=phases[i+1].t){a=phases[i];b=phases[i+1];break}}
+  const p=(dayTime-a.t)/(b.t-a.t);
+  return{skyT:lerpColor(a.skyT,b.skyT,p),skyB:lerpColor(a.skyB,b.skyB,p),ground:lerpColor(a.ground,b.ground,p),mtn:lerpColor(a.mtn,b.mtn,p),fog:p<0.5?a.fog:b.fog,sunIntensity:Math.max(0,Math.sin(dayTime*Math.PI*2-Math.PI*0.5))*0.8,isDay:dayTime>0.25&&dayTime<0.75};
+}
+
+function updateTimeBadge(){
+  const el=document.getElementById('time-icon'),lb=document.getElementById('time-label');
+  if(dayTime<0.22||dayTime>0.82){el.textContent='🌙';lb.textContent='Night'}
+  else if(dayTime<0.32){el.textContent='🌅';lb.textContent='Sunrise'}
+  else if(dayTime<0.7){el.textContent='☀️';lb.textContent='Day'}
+  else if(dayTime<0.8){el.textContent='🌇';lb.textContent='Sunset'}
+  else{el.textContent='🌙';lb.textContent='Night'}
+}
+
+// ─── DRAW FUNCTIONS ───
+function drawSky(w,h,tc){const ho=h*0.55;const g=cx.createLinearGradient(0,0,0,ho+40);g.addColorStop(0,tc.skyT);g.addColorStop(1,tc.skyB);cx.fillStyle=g;cx.fillRect(0,0,w,ho+40)}
+
+const stars=Array.from({length:120},(_,i)=>({x:hash(i)*1.4-0.2,y:hash(i+99)*0.5,s:0.5+hash(i+50)*1.8,p:hash(i+200)*6.28,b:0.3+hash(i+300)*0.7}));
+function drawStars(w,h,tc){const n=1-tc.sunIntensity;if(n<0.1)return;for(const s of stars){const bri=s.b*(0.5+0.5*Math.sin(t*0.7+s.p))*n;cx.fillStyle=`rgba(200,210,255,${bri})`;cx.beginPath();cx.arc(s.x*w,s.y*h,s.s,0,6.28);cx.fill()}}
+
+function drawSun(w,h,tc){if(tc.sunIntensity<0.05)return;const a=dayTime*Math.PI*2-Math.PI*0.5;const sx=w*0.5+Math.cos(a)*w*0.35,sy=h*0.55-Math.sin(a)*h*0.45;if(sy>h*0.55)return;const g=cx.createRadialGradient(sx,sy,5,sx,sy,80);g.addColorStop(0,`rgba(255,240,200,${tc.sunIntensity*0.5})`);g.addColorStop(1,'rgba(255,240,200,0)');cx.fillStyle=g;cx.fillRect(sx-80,sy-80,160,160);cx.fillStyle=`rgba(255,250,220,${tc.sunIntensity})`;cx.beginPath();cx.arc(sx,sy,12,0,6.28);cx.fill()}
+
+function drawMoon(w,h,tc){if(tc.sunIntensity>0.5)return;const al=(1-tc.sunIntensity)*0.8;const mx=w*0.8,my=h*0.1;const g=cx.createRadialGradient(mx,my,8,mx,my,80);g.addColorStop(0,`rgba(255,252,230,${al*0.18})`);g.addColorStop(1,'rgba(255,252,230,0)');cx.fillStyle=g;cx.fillRect(mx-80,my-80,160,160);cx.fillStyle=`rgba(255,252,230,${al})`;cx.beginPath();cx.arc(mx,my,14,0,6.28);cx.fill();cx.fillStyle=tc.skyT;cx.beginPath();cx.arc(mx+5,my-2,11,0,6.28);cx.fill()}
+
+function drawMtnRange(w,h,baseY,amp,freq,spd,tc){const off=scroll*spd;cx.fillStyle=tc.mtn;cx.beginPath();cx.moveTo(0,h);for(let x=0;x<=w;x+=3){const n=Math.sin((x+off)*freq)*amp+Math.sin((x+off)*freq*2.1+1.3)*amp*0.35+Math.sin((x+off)*freq*0.4+4.1)*amp*0.5;cx.lineTo(x,baseY+n)}cx.lineTo(w,h);cx.closePath();cx.fill()}
+
+function drawFog(w,h,tc){const ho=h*0.55;const fg=cx.createLinearGradient(0,ho-30,0,ho+60);fg.addColorStop(0,tc.fog+'0)');fg.addColorStop(0.4,tc.fog+'0.5)');fg.addColorStop(1,tc.fog+'0)');cx.fillStyle=fg;cx.fillRect(0,ho-30,w,90)}
+
+function drawGround(w,h,tc){
+  const ho=h*0.55;const g=cx.createLinearGradient(0,ho,0,h);g.addColorStop(0,tc.ground);g.addColorStop(1,'#0a0a08');cx.fillStyle=g;cx.fillRect(0,ho,w,h-ho);
+  const vx=w*0.5,vy=ho,pwf=w*0.03,pwn=w*0.22;
+  const db=tc.sunIntensity;
+  cx.fillStyle=`rgb(${Math.round(35+db*30)},${Math.round(35+db*25)},${Math.round(45+db*15)})`;
+  cx.beginPath();cx.moveTo(vx-pwf,vy);cx.lineTo(vx+pwf,vy);cx.lineTo(vx+pwn,h);cx.lineTo(vx-pwn,h);cx.closePath();cx.fill();
+  cx.strokeStyle=`rgba(255,255,255,${0.02+db*0.03})`;cx.lineWidth=1;cx.beginPath();cx.moveTo(vx-pwf,vy);cx.lineTo(vx-pwn,h);cx.moveTo(vx+pwf,vy);cx.lineTo(vx+pwn,h);cx.stroke();
+  for(let i=0;i<18;i++){const pr=(i/18+(scroll*0.003)%(1/18));if(pr>1)continue;const p=pr*pr;const y=vy+(h-vy)*p;cx.fillStyle=`rgba(255,255,255,${p*(0.08+db*0.06)})`;cx.fillRect(vx-1,y,2,2+p*18)}
+}
+
+function drawTrees(w,h,tc){
+  const ho=h*0.55,vx=w*0.5;
+  for(let i=0;i<20;i++){const seed=hash(i+100),side=i%2===0?-1:1;const z=((seed+scroll*0.0008*(0.5+hash(i+150)*0.5))%1);const p=z*z;const y=ho+(h-ho)*p;const pw=w*0.03+(w*0.22-w*0.03)*p;const x=vx+side*(pw+20+hash(i+200)*80*p);if(p<0.01||y<ho)continue;const sc=0.15+p*0.85,al=Math.min(p*1.5,0.8);const th=30*sc+20*sc,cr=12*sc+10*sc;cx.fillStyle=`rgba(30,28,22,${al})`;cx.fillRect(x-2*sc,y-th,4*sc,th);const cg=Math.round(35+tc.sunIntensity*40);cx.fillStyle=`rgba(20,${cg},18,${al})`;cx.beginPath();cx.ellipse(x,y-th-cr*0.5,cr,cr*1.3,0,0,6.28);cx.fill()}
+}
+
+const flies=Array.from({length:20},(_,i)=>({x:hash(i+700),y:0.5+hash(i+800)*0.35,sp:0.1+hash(i+900)*0.3,ph:hash(i+1000)*6.28,sz:1+hash(i+1100)*2}));
+function drawFireflies(w,h,tc){const n=1-tc.sunIntensity;if(n<0.2)return;for(const f of flies){const fx=((f.x+t*f.sp*0.02)%1.1)*w;const fy=f.y*h+Math.sin(t*1.5+f.ph)*20;const gl=(0.3+0.7*Math.sin(t*2.5+f.ph))*n;const rg=cx.createRadialGradient(fx,fy,0,fx,fy,f.sz*5);rg.addColorStop(0,`rgba(180,220,100,${gl*0.35})`);rg.addColorStop(1,'rgba(180,220,100,0)');cx.fillStyle=rg;cx.fillRect(fx-f.sz*5,fy-f.sz*5,f.sz*10,f.sz*10);cx.fillStyle=`rgba(200,240,120,${gl*0.8})`;cx.beginPath();cx.arc(fx,fy,f.sz*0.6,0,6.28);cx.fill()}}
+
+function drawClouds(w,h,tc){if(tc.sunIntensity<0.1)return;for(let i=0;i<5;i++){const x2=((hash(i+400)*w+scroll*0.02*(0.3+hash(i+450)*0.4))%(w+200))-100;const y2=h*0.55*0.15+hash(i+500)*h*0.55*0.35;const cw=60+hash(i+550)*80,ch=10+hash(i+560)*15;cx.fillStyle=`rgba(255,255,255,${tc.sunIntensity*0.08})`;cx.beginPath();cx.ellipse(x2,y2,cw,ch,0,0,6.28);cx.fill()}}
+
+function drawCharacter(w,h){
+  const ho=h*0.55,bx=w*0.5,by=ho+(h-ho)*0.35,sc=2.2;
+
+  // ── Stretch poses ──
+  if(stretchActive && currentStretchId){
+    cx.save();cx.translate(bx,by);cx.lineCap='round';cx.lineJoin='round';
+
+    // Shadow
+    cx.fillStyle='rgba(0,0,0,0.25)';cx.beginPath();cx.ellipse(0,4,14*sc,3*sc,0,0,6.28);cx.fill();
+
+    const breathe=Math.sin(stretchT*1.5)*0.15; // gentle breathing motion
+    const cycle=Math.sin(stretchT*2); // for repeating motions
+
+    // Compute pose params
+    let legL=0,legR=0,armLx=0,armLy=0,armRx=0,armRy=0,bodyTilt=0,bodySquat=0,headTilt=0,tipToe=0;
+
+    switch(currentStretchId){
+      case 'overhead':
+        armLx=-2*sc; armLy=-32*sc+breathe*3*sc;
+        armRx=2*sc; armRy=-32*sc+breathe*3*sc;
+        bodySquat=breathe*2;
+        break;
+      case 'fold':
+        bodyTilt=0.5+breathe*0.1;
+        armLx=-4*sc; armLy=-2*sc;
+        armRx=4*sc; armRy=-2*sc;
+        headTilt=0.3;
+        break;
+      case 'armcircle':
+        armLx=(-12+Math.cos(stretchT*3)*12)*sc;
+        armLy=(-16+Math.sin(stretchT*3)*10)*sc;
+        armRx=(12+Math.cos(stretchT*3+Math.PI)*12)*sc;
+        armRy=(-16+Math.sin(stretchT*3+Math.PI)*10)*sc;
+        break;
+      case 'quad':
+        legR=cycle>0?-8:0;
+        legL=cycle>0?0:-8;
+        armRx=cycle>0?4*sc:9*sc; armRy=cycle>0?-4*sc:-10*sc;
+        armLx=cycle>0?-9*sc:-4*sc; armLy=cycle>0?-10*sc:-4*sc;
+        break;
+      case 'chest':
+        armLx=-10*sc-breathe*4*sc; armLy=-8*sc;
+        armRx=10*sc+breathe*4*sc; armRy=-8*sc;
+        break;
+      case 'twist':
+        bodyTilt=cycle*0.25;
+        armLx=(-8+cycle*6)*sc; armLy=-14*sc;
+        armRx=(8+cycle*6)*sc; armRy=-14*sc;
+        headTilt=cycle*0.15;
+        break;
+      case 'calfraise':
+        tipToe=Math.abs(Math.sin(stretchT*2))*6;
+        armLx=-6*sc; armLy=-14*sc+breathe*2*sc;
+        armRx=6*sc; armRy=-14*sc+breathe*2*sc;
+        break;
+      case 'sidebend':
+        bodyTilt=cycle*0.3;
+        armLx=cycle>0?(-3)*sc:(-12)*sc;
+        armLy=cycle>0?(-30)*sc:(-14)*sc;
+        armRx=cycle>0?(12)*sc:(3)*sc;
+        armRy=cycle>0?(-14)*sc:(-30)*sc;
+        break;
+      case 'breathe':
+        const expand=Math.sin(stretchT*0.8)*0.12;
+        bodySquat=expand*8;
+        armLx=(-8-expand*20)*sc; armLy=(-14)*sc;
+        armRx=(8+expand*20)*sc; armRy=(-14)*sc;
+        break;
+      case 'lunge':
+        legL=cycle>0?8:-4;
+        legR=cycle>0?-4:8;
+        bodySquat=4;
+        armLx=-6*sc; armLy=-14*sc;
+        armRx=6*sc; armRy=-14*sc;
+        break;
+      default:
+        armLx=-9*sc; armLy=-10*sc;
+        armRx=9*sc; armRy=-10*sc;
+    }
+
+    cx.translate(0,-tipToe+bodySquat);
+
+    // Body tilt
+    cx.rotate(bodyTilt);
+
+    // Legs
+    cx.strokeStyle='#2c2824';cx.lineWidth=3.5*sc;
+    cx.beginPath();cx.moveTo(-3*sc,-8*sc);cx.lineTo((-3+legL*0.3)*sc,0+tipToe);cx.stroke();
+    cx.beginPath();cx.moveTo(3*sc,-8*sc);cx.lineTo((3+legR*0.3)*sc,0+tipToe);cx.stroke();
+
+    // Boots
+    cx.fillStyle='#1a1816';
+    cx.fillRect((-5+legL*0.3)*sc,-2*sc+tipToe,4*sc,2.5*sc);
+    cx.fillRect((1+legR*0.3)*sc,-2*sc+tipToe,4*sc,2.5*sc);
+
+    // Body
+    cx.fillStyle='#3d3530';
+    cx.beginPath();cx.moveTo(-6*sc,-20*sc);cx.lineTo(6*sc,-20*sc);cx.lineTo(5*sc,-8*sc);cx.lineTo(-5*sc,-8*sc);cx.closePath();cx.fill();
+    cx.strokeStyle='#4a4038';cx.lineWidth=1;cx.beginPath();cx.moveTo(0,-20*sc);cx.lineTo(0,-8*sc);cx.stroke();
+
+    // Arms
+    cx.strokeStyle='#3d3530';cx.lineWidth=3*sc;
+    cx.beginPath();cx.moveTo(-5*sc,-18*sc);cx.lineTo(armLx,armLy);cx.stroke();
+    cx.beginPath();cx.moveTo(5*sc,-18*sc);cx.lineTo(armRx,armRy);cx.stroke();
+
+    // Hands (small circles at arm ends)
+    cx.fillStyle='#d4c4b0';
+    cx.beginPath();cx.arc(armLx,armLy,1.8*sc,0,6.28);cx.fill();
+    cx.beginPath();cx.arc(armRx,armRy,1.8*sc,0,6.28);cx.fill();
+
+    // Neck + Head
+    cx.fillStyle='#d4c4b0';cx.fillRect(-1.5*sc,-22*sc,3*sc,3*sc);
+    cx.save();cx.rotate(headTilt);
+    cx.beginPath();cx.arc(0,-26*sc,5*sc,0,6.28);cx.fill();
+    cx.fillStyle='#2a2218';cx.beginPath();cx.arc(0,-27*sc,5.2*sc,3.4,6.1);cx.fill();
+    cx.fillStyle='#8b3a3a';cx.beginPath();cx.arc(0,-27.5*sc,5.5*sc,3.0,6.28);cx.fill();
+    cx.fillStyle='#6b2a2a';cx.fillRect(-5.5*sc,-28*sc,11*sc,2*sc);
+    cx.restore();
+
+    // Backpack
+    cx.fillStyle='#5a4a3a';cx.beginPath();cx.roundRect(-8*sc,-19*sc,5*sc,10*sc,2*sc);cx.fill();
+    cx.fillStyle='#4a3a2a';cx.fillRect(-8*sc,-19*sc,5*sc,2.5*sc);
+
+    cx.restore();
+    return;
+  }
+
+  // ── Normal walking / idle pose ──
+  const ls=walking?Math.sin(walkPhase*7)*10:0;
+  const as=walking?Math.sin(walkPhase*7)*14:0;
+  const bob=walking?Math.abs(Math.sin(walkPhase*7))*3:0;
+  cx.save();cx.translate(bx,by-bob);cx.lineCap='round';cx.lineJoin='round';
+  cx.fillStyle='rgba(0,0,0,0.25)';cx.beginPath();cx.ellipse(0,4,14*sc,3*sc,0,0,6.28);cx.fill();
+  cx.strokeStyle='#2c2824';cx.lineWidth=3.5*sc;
+  cx.beginPath();cx.moveTo(-3*sc,-8*sc);cx.lineTo((-3+ls*0.25)*sc,0);cx.stroke();
+  cx.beginPath();cx.moveTo(3*sc,-8*sc);cx.lineTo((3-ls*0.25)*sc,0);cx.stroke();
+  cx.fillStyle='#1a1816';cx.fillRect((-5+ls*0.25)*sc,-2*sc,4*sc,2.5*sc);cx.fillRect((1-ls*0.25)*sc,-2*sc,4*sc,2.5*sc);
+  cx.fillStyle='#3d3530';cx.beginPath();cx.moveTo(-6*sc,-20*sc);cx.lineTo(6*sc,-20*sc);cx.lineTo(5*sc,-8*sc);cx.lineTo(-5*sc,-8*sc);cx.closePath();cx.fill();
+  cx.strokeStyle='#4a4038';cx.lineWidth=1;cx.beginPath();cx.moveTo(0,-20*sc);cx.lineTo(0,-8*sc);cx.stroke();
+  cx.strokeStyle='#3d3530';cx.lineWidth=3*sc;
+  cx.beginPath();cx.moveTo(-5*sc,-18*sc);cx.lineTo((-9-as*0.25)*sc,-10*sc);cx.stroke();
+  cx.beginPath();cx.moveTo(5*sc,-18*sc);cx.lineTo((9+as*0.25)*sc,-10*sc);cx.stroke();
+  cx.fillStyle='#d4c4b0';cx.fillRect(-1.5*sc,-22*sc,3*sc,3*sc);cx.beginPath();cx.arc(0,-26*sc,5*sc,0,6.28);cx.fill();
+  cx.fillStyle='#2a2218';cx.beginPath();cx.arc(0,-27*sc,5.2*sc,3.4,6.1);cx.fill();
+  cx.fillStyle='#8b3a3a';cx.beginPath();cx.arc(0,-27.5*sc,5.5*sc,3.0,6.28);cx.fill();
+  cx.fillStyle='#6b2a2a';cx.fillRect(-5.5*sc,-28*sc,11*sc,2*sc);
+  cx.fillStyle='#5a4a3a';cx.beginPath();cx.roundRect(-8*sc,-19*sc,5*sc,10*sc,2*sc);cx.fill();
+  cx.fillStyle='#4a3a2a';cx.fillRect(-8*sc,-19*sc,5*sc,2.5*sc);
+  cx.restore();
+}
+
+// ─── MAIN LOOP ───
+let last=0;
+function frame(ts){
+  const dt=Math.min((ts-last)/1000,0.1);last=ts;
+  const w=cv.width,h=cv.height;
+  if(walking&&started){t+=dt;walkPhase+=dt;scroll+=dt*WALK_SPEED;dayTime=(dayTime+dt/DAY_CYCLE_SECONDS)%1;updateAmbientForTime();updateTimeBadge()}
+  if(stretchActive){t+=dt;stretchT+=dt;updateTimeBadge()}
+  if(started)updateSteps(dt);
+  const tc=getTimeColors();
+  cx.clearRect(0,0,w,h);
+  drawSky(w,h,tc);drawStars(w,h,tc);drawSun(w,h,tc);drawMoon(w,h,tc);drawClouds(w,h,tc);
+  drawMtnRange(w,h,h*0.48,50,0.0025,0.08,tc);drawMtnRange(w,h,h*0.50,40,0.004,0.15,tc);drawMtnRange(w,h,h*0.53,30,0.006,0.25,tc);
+  drawFog(w,h,tc);drawGround(w,h,tc);drawTrees(w,h,tc);drawFireflies(w,h,tc);drawCharacter(w,h);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+function updateSteps(dt){if(!walking)return;stepAcc+=dt;if(stepAcc>=STEP_INTERVAL){stepAcc-=STEP_INTERVAL;steps++;distance+=STRIDE_M;document.getElementById('step-count').textContent=steps.toLocaleString();document.getElementById('dist-val').textContent=(distance/1000).toFixed(1)}}
+</script>
+</body>
+</html>

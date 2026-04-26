@@ -1,0 +1,17 @@
+{
+  "name": "walking-simulator",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "generate-audio": "node generate-audio.mjs",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@elevenlabs/elevenlabs-js": "^2.44.0"
+  }
+}
