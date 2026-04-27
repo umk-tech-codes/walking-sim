@@ -30,17 +30,6 @@ npm install
 ELEVENLABS_API_KEY=sk_... node generate-audio.mjs
 ```
 
-## Deploy
-
-Static site — no build step. Deploy anywhere that serves HTML.
-
-```bash
-# Netlify
-netlify login
-netlify init
-netlify deploy --prod
-```
-
 ## License
 
 MIT
